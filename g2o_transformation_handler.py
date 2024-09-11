@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 import json
+import yaml
 from pymap3d import *
 import pandas as pd 
 import argparse
@@ -84,7 +85,7 @@ class TransformationHandler:
         else:
             raise ValueError("g2o_files must match the number of mission folders")
 
-    ## -------------- Extra functionalities added ----------------  
+    ## -------------- Extra functionalities between missions ----------------  
 
     def calculate_timestamps_difference(self, mission_id_1, mission_id_2):
         """
@@ -123,16 +124,18 @@ class TransformationHandler:
             quat_1 = np.array([float(x) for x in node_1['pose'][3:]])
             pos_2 = np.array([float(x) for x in node_2['pose'][:3]])
             quat_2 = np.array([float(x) for x in node_2['pose'][3:]])
-            
-            # Convert position and quaternion to 4x4 transformation matrix
+            # 4x4 transformation
             T_m1 = pose_to_matrix(pos_1, quat_1)
             T_m2 = pose_to_matrix(pos_2, quat_2)
             
-            # Calculate relative transformation matrix
-            T_m1_m2 = np.linalg.inv(T_m1) @ T_m2
+            # get relative transformation
+            # T_target_source = T_target_base @ inv(T_source_base)
+            # T_m2_m1 = T_m2_base @ inv(T_m1_base)
+            T_m2_m1 =  T_m2 @ np.linalg.inv(T_m1)
             
             # Store relative transformation in the dictionary
-            node_1['transform_T_m1_m2'] = T_m1_m2
+            node_1['transform_T_m2_m1'] = T_m2_m1
+            
         self.dict_all[self.mission_folders[mission_id_1]] = mission_1_data
         
 
@@ -144,7 +147,7 @@ class TransformationHandler:
             mission_1_data = self.dict_all[self.mission_folders[mission_id_1]]
             
             for node in mission_1_data:
-                relative_transform_matrix = node.get('transform_T_m1_m2')
+                relative_transform_matrix = node.get('transform_T_m2_m1')
                 if relative_transform_matrix is not None:
                     # Get the pose in mission_id_1's frame
                     pose_m1 = node['pose']
@@ -158,29 +161,37 @@ class TransformationHandler:
                     print('relative_transform_matrix missing!!!!')
     
 def main():
-    parser = argparse.ArgumentParser(description="Process G2O files for multiple missions")
-    parser.add_argument('--place_folder', default='/media/haedam/T7', type=str, help='Base folder for all missions')
-    parser.add_argument('--mission_folders', default=['2023-08-15-13-12-48-exp20-d2','2023-08-15-13-12-48-exp20-d2-arial'], type=str, nargs='+', help='List of mission folder names')
-    parser.add_argument('--g2o_files', default=['/media/haedam/T7/2023-08-15-13-12-48-exp20-d2/slam_pose_graph.g2o', '/media/haedam/T7/2023-08-15-13-12-48-exp20-d2/optimized_pose_graph_aerial_constraints.g2o'], type=str, nargs='+', help='G2O file(s) to process')
-    parser.add_argument('--offset', default=0, type=int, help='Node offset for missions (default: 5000)')
-    parser.add_argument('--output',default='g2o_dict.json', type=str, help='Output JSON file name')
-
+    parser = argparse.ArgumentParser(description="Process configurations for multiple missions")
+    parser.add_argument('--config', default='config.yaml', type=str, help='Path to YAML config file')
     args = parser.parse_args()
 
-    handler = TransformationHandler(args.place_folder, args.mission_folders, args.g2o_files, args.offset)
+    # Load configuration from YAML file
+    with open(args.config, 'r') as file:
+        config = yaml.safe_load(file)
+
+    # Initialize TransformationHandler with configurations
+    handler = TransformationHandler(
+        place_folder=config['place_folder'],
+        mission_folders=config['mission_folders'],
+        g2o_files=config['g2o_files'],
+        offset=config['offset']
+    )
+
+    # check dict
     result = handler.dict_all
-    print(result.keys())
     print(f"Processed {len(result)} missions:")
     for mission, data in result.items():
         print(f"{mission}: {len(data)} nodes")
 
-    output_file = os.path.join(args.place_folder, args.output)
-    handler.save_to_json(result, output_file)
-    print(f"Output saved to {output_file}")
-    
-    handler.calculate_relative_transformation(mission_id_1=0,mission_id_2=1)
-    result = handler.dict_all
-    print(result.values())
-    
+
+
+    # Execute additional actions specified in YAML
+    for action in config['actions_transform_handler']:
+        if hasattr(handler, action):
+            print(f"Executing {action}...")
+            getattr(handler, action)(mission_id_1=0, mission_id_2=1)
+        else:
+            print(f"Action {action} not found in handler")
+
 if __name__ == "__main__":
     main()
