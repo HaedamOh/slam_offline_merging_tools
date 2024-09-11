@@ -1,0 +1,16 @@
+place_folder: '/media/haedam/T7'
+mission_folders:
+  - '2023-08-15-13-12-48-exp20-d2'
+  - '2023-08-15-13-12-48-exp20-d2-arial'
+g2o_files:
+  - '/media/haedam/T7/2023-08-15-13-12-48-exp20-d2/slam_pose_graph.g2o'
+  - '/media/haedam/T7/2023-08-15-13-12-48-exp20-d2/optimized_pose_graph_aerial_constraints.g2o'
+offset: 0
+output: 'g2o_dict.json'
+
+actions_transform_handler:
+  - calculate_relative_transformation
+
+actions_pointclouds_handler:
+  - save_slam_poses_pcd
+  # - transform_pointclouds_base_to_map
